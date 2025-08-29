@@ -3,6 +3,8 @@ import { apiProducts } from './utils/data';
 import { ProductCatalogModel } from './components/Models/ProductCatalogModel';
 import { CartModel } from './components/Models/CartModel';
 import { BuyerModel } from './components/Models/BuyerModel';
+import { Api, WebLarekApi } from './components/base/Api';
+import { API_URL } from './utils/constants';
 
 // Проверка работы моделей данных в консоли
 
@@ -63,3 +65,17 @@ console.log('Покупатель: валидация при некоррект�
 buyerModel.clear();
 console.log('Покупатель: после очистки', buyerModel.getData());
 console.log('Покупатель: валидация после очистки (ожидаем ошибки)', buyerModel.validate());
+
+// --- Слой коммуникации: получение каталога с сервера ---
+const baseApi = new Api(API_URL);
+const weblarekApi = new WebLarekApi(baseApi);
+
+weblarekApi
+    .getProducts()
+    .then((products) => {
+        productsModel.setProducts(products);
+        console.log('Каталог (с сервера): массив товаров', productsModel.getProducts());
+    })
+    .catch((err) => {
+        console.error('Ошибка загрузки каталога с сервера', err);
+    });

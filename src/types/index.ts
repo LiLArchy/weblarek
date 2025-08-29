@@ -25,3 +25,22 @@ export interface IBuyer {
 }
 
 
+// Ответ на получение каталога с сервера
+export interface IProductListResponse {
+    total: number;
+    items: IProduct[];
+}
+
+// Данные для отправки заказа на сервер
+// Используем уже существующий интерфейс IBuyer и дополняем его списком товаров и суммой
+export interface IOrderRequest extends IBuyer {
+    items: string[]; // массив id выбранных продуктов
+    total: number; // итоговая сумма заказа
+}
+
+// Ответ сервера при оформлении заказа
+export interface IOrderResponse {
+    id: string; // идентификатор созданного заказа
+    total: number; // подтвержденная сумма заказа
+}
+

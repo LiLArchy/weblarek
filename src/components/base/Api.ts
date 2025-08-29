@@ -35,3 +35,25 @@ export class Api {
         }).then(this.handleResponse<T>);
     }
 }
+
+
+import type { IApi, IOrderRequest, IOrderResponse, IProduct, IProductListResponse } from '../../types';
+
+export class WebLarekApi {
+    protected api: IApi;
+
+    constructor(api: IApi) {
+        this.api = api;
+    }
+
+    // Получить каталог товаров: GET /product/
+    public async getProducts(): Promise<IProduct[]> {
+        const response = await this.api.get<IProductListResponse>('/product/');
+        return response.items ?? [];
+    }
+
+    // Отправить заказ: POST /order/
+    public createOrder(data: IOrderRequest): Promise<IOrderResponse> {
+        return this.api.post<IOrderResponse>('/order/', data);
+    }
+}
