@@ -66,7 +66,7 @@ buyerModel.clear();
 console.log('Покупатель: после очистки', buyerModel.getData());
 console.log('Покупатель: валидация после очистки (ожидаем ошибки)', buyerModel.validate());
 
-// --- Слой коммуникации: получение каталога с сервера ---
+
 const baseApi = new Api(API_URL);
 const weblarekApi = new WebLarekApi(baseApi);
 
