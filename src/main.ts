@@ -1,81 +1,173 @@
-import './scss/styles.scss';
-import { apiProducts } from './utils/data';
-import { ProductCatalogModel } from './components/Models/ProductCatalogModel';
-import { CartModel } from './components/Models/CartModel';
-import { BuyerModel } from './components/Models/BuyerModel';
-import { Api, WebLarekApi } from './components/base/Api';
-import { API_URL } from './utils/constants';
+import "./scss/styles.scss";
+import { cloneTemplate, ensureElement } from "./utils/utils";
+import { CatalogView } from "./components/View/CatalogView";
+import { CatalogCardView } from "./components/View/cards/CatalogCardView";
+import { PreviewCardView } from "./components/View/cards/PreviewCardView";
+import { CartItemView } from "./components/View/cards/CartItemView";
+import { CartView } from "./components/View/CartView";
+import { OrderFormView } from "./components/View/forms/OrderFormView";
+import { ContactsFormView } from "./components/View/forms/ContactsFormView";
+import { ModalView } from "./components/View/ModalView";
+import { EventEmitter } from "./components/base/Events";
+import { ProductCatalogModel } from "./components/Models/ProductCatalogModel";
+import { CartModel } from "./components/Models/CartModel";
+import { BuyerModel } from "./components/Models/BuyerModel";
+import { Api, WebLarekApi } from "./components/base/Api";
+import { API_URL } from "./utils/constants";
+import { CDN_URL } from "./utils/constants";
 
-// Проверка работы моделей данных в консоли
+// Брокер событий
+const events = new EventEmitter();
 
-// Каталог товаров
-const productsModel = new ProductCatalogModel();
-productsModel.setProducts(apiProducts.items);
-console.log('Каталог: массив товаров', productsModel.getProducts());
+// DOM ссылки и шаблоны
+const gallery = ensureElement<HTMLElement>(".gallery");
+const modalContainer = ensureElement<HTMLElement>("#modal-container");
+const tplCatalog = ensureElement<HTMLTemplateElement>("#card-catalog");
+const tplPreview = ensureElement<HTMLTemplateElement>("#card-preview");
+const tplBasket = ensureElement<HTMLTemplateElement>("#basket");
+const tplBasketItem = ensureElement<HTMLTemplateElement>("#card-basket");
+const tplOrder = ensureElement<HTMLTemplateElement>("#order");
+const tplContacts = ensureElement<HTMLTemplateElement>("#contacts");
 
-const firstId = apiProducts.items[0]?.id;
-const missingId = 'missing-id';
-console.log('Каталог: товар по первому id', firstId, productsModel.getProductById(firstId));
-console.log('Каталог: товар по несуществующему id', missingId, productsModel.getProductById(missingId));
+// Модели данных
+const productsModel = new ProductCatalogModel(events);
+const cartModel = new CartModel(events);
+const buyerModel = new BuyerModel(events);
 
-productsModel.setSelectedProduct(apiProducts.items[1] ?? null);
-console.log('Каталог: выбранный товар', productsModel.getSelectedProduct());
-productsModel.setSelectedProduct(null);
-console.log('Каталог: выбранный товар после сброса', productsModel.getSelectedProduct());
+// Представления
+const catalogView = new CatalogView(gallery);
+const modalView = new ModalView(modalContainer, () =>
+  events.emit("modal:closed")
+);
 
-// Корзина
-const cartModel = new CartModel();
-console.log('Корзина: стартовые товары', cartModel.getItems());
-
-const p1 = apiProducts.items[0];
-const p2 = apiProducts.items[2];
-cartModel.addItem(p1);
-console.log('Корзина: после добавления первого товара', cartModel.getItems());
-cartModel.addItem(p2);
-console.log('Корзина: после добавления второго товара', cartModel.getItems());
-cartModel.addItem(p1); // повторно — не должен дублировать
-console.log('Корзина: после повторного добавления первого товара', cartModel.getItems());
-
-console.log('Корзина: количество товаров', cartModel.getCount());
-console.log('Корзина: содержит первый товар?', cartModel.hasItem(p1.id));
-
-console.log('Корзина: общая стоимость', cartModel.getTotal());
-cartModel.removeItem(p1.id);
-console.log('Корзина: после удаления первого товара', cartModel.getItems());
-console.log('Корзина: общая стоимость после удаления', cartModel.getTotal());
-cartModel.clear();
-console.log('Корзина: после очистки', cartModel.getItems(), 'count:', cartModel.getCount());
-
-// Покупатель
-const buyerModel = new BuyerModel();
-console.log('Покупатель: начальные данные', buyerModel.getData());
-
-buyerModel.setData({
-    payment: 'online',
-    address: 'г. Москва, ул. Пушкина, д. Колотушкина',
-    phone: '+79990000000',
-    email: 'user@example.com',
+// Рендер каталога
+events.on("catalog:changed", () => {
+  const items = productsModel.getProducts();
+  const nodes = items.map((p) => {
+    const node = cloneTemplate<HTMLElement>(tplCatalog);
+    const card = new CatalogCardView(node, (id) =>
+      events.emit("view:product:selected", { id })
+    );
+    card["setId"](p.id);
+    card["setTitle"](p.title);
+    card["setCategory"](p.category);
+    card["setImageSrc"](`${CDN_URL}${p.image}`, p.title);
+    card["setPrice"](p.price);
+    return card.render();
+  });
+  catalogView.setItems(nodes);
 });
-console.log('Покупатель: после setData', buyerModel.getData());
-console.log('Покупатель: валидация (ожидаем valid=true)', buyerModel.validate());
 
-buyerModel.setData({ email: 'wrong@format', phone: '123' });
-console.log('Покупатель: валидация при некорректных email/phone', buyerModel.validate());
+// Открытие предпросмотра
+events.on<{ id: string }>("view:product:selected", ({ id }) => {
+  const p = productsModel.getProductById(id);
+  if (!p) return;
+  const node = cloneTemplate<HTMLElement>(tplPreview);
+  const preview = new PreviewCardView(node, () =>
+    events.emit("view:product:addToCart", { id })
+  );
+  preview["setId"](p.id);
+  preview["setTitle"](p.title);
+  preview["setCategory"](p.category);
+  preview["setImageSrc"](`${CDN_URL}${p.image}`, p.title);
+  preview["setPrice"](p.price);
+  preview["setDescription"](p.description);
+  modalView.open(preview.render());
+});
 
-buyerModel.clear();
-console.log('Покупатель: после очистки', buyerModel.getData());
-console.log('Покупатель: валидация после очистки (ожидаем ошибки)', buyerModel.validate());
+// Добавление в корзину
+events.on<{ id: string }>("view:product:addToCart", ({ id }) => {
+  const product = productsModel.getProductById(id);
+  if (!product) return;
+  cartModel.addItem(product);
+  modalView.close();
+});
 
+// Открытие корзины по кнопке в шапке
+const headerBasketBtn = ensureElement<HTMLButtonElement>(".header__basket");
+const headerBasketCounter = ensureElement<HTMLElement>(
+  ".header__basket-counter"
+);
+headerBasketBtn.addEventListener("click", () => events.emit("view:cart:open"));
 
+// Обновление счётчика корзины
+events.on("cart:changed", () => {
+  headerBasketCounter.textContent = String(cartModel.getCount());
+});
+
+// Рендер корзины
+events.on("view:cart:open", () => {
+  const basketNode = cloneTemplate<HTMLElement>(tplBasket);
+  const cartView = new CartView(basketNode, () =>
+    events.emit("view:order:open")
+  );
+
+  const items = cartModel.getItems().map((p, index) => {
+    const node = cloneTemplate<HTMLElement>(tplBasketItem);
+    node.querySelector(".basket__item-index")!.textContent = String(index + 1);
+    const item = new CartItemView(node, (rid) => cartModel.removeItem(rid));
+    item["setId"](p.id);
+    item["setTitle"](p.title);
+    item["setPrice"](p.price);
+    return item.render();
+  });
+
+  const total = cartModel.getTotal();
+
+  cartView.setItems(items);
+  cartView.setTotal(total);
+  modalView.open(cartView.render());
+});
+
+// Последовательность оформления заказа: Order -> Contacts
+events.on("view:order:open", () => {
+  const node = cloneTemplate<HTMLElement>(tplOrder);
+  const orderForm = new OrderFormView(
+    node,
+    () => events.emit("view:contacts:open"),
+    (data) => {
+      const valid = Boolean(data.address) && Boolean(data.payment);
+      orderForm.setDisabled(!valid);
+      buyerModel.setData({ address: data.address!, payment: data.payment! });
+    }
+  );
+  modalView.open(orderForm.render());
+});
+
+events.on("view:contacts:open", () => {
+  const node = cloneTemplate<HTMLElement>(tplContacts);
+  const contactsForm = new ContactsFormView(
+    node,
+    () => events.emit("view:order:success"),
+    (data) => {
+      const emailOk = Boolean(data.email && /@/.test(data.email));
+      const phoneOk = Boolean(data.phone && data.phone.length >= 6);
+      contactsForm.setDisabled(!(emailOk && phoneOk));
+      buyerModel.setData({ email: data.email!, phone: data.phone! });
+    }
+  );
+  modalView.open(contactsForm.render());
+});
+
+events.on("view:order:success", () => {
+  const successTpl = ensureElement<HTMLTemplateElement>("#success");
+  const node = cloneTemplate<HTMLElement>(successTpl);
+  node.querySelector(".order-success__close")!.addEventListener("click", () => {
+    modalView.close();
+    cartModel.clear();
+  });
+  modalView.open(node);
+});
+
+// Загрузка каталога с сервера
 const baseApi = new Api(API_URL);
 const weblarekApi = new WebLarekApi(baseApi);
 
 weblarekApi
-    .getProducts()
-    .then((products) => {
-        productsModel.setProducts(products);
-        console.log('Каталог (с сервера): массив товаров', productsModel.getProducts());
-    })
-    .catch((err) => {
-        console.error('Ошибка загрузки каталога с сервера', err);
-    });
+  .getProducts()
+  .then((products) => {
+    productsModel.setProducts(products);
+  })
+  .catch((err) => {
+    console.error("Ошибка загрузки каталога с сервера", err);
+  });
