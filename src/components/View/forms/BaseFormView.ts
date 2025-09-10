@@ -12,7 +12,10 @@ export abstract class BaseFormView<T> extends Component<void> {
     onChange?: (data: Partial<T>) => void
   ) {
     super(container);
-    this.formEl = ensureElement<HTMLFormElement>("form", container);
+    // container может уже быть формой (когда шаблон начинается с <form>)
+    this.formEl = container instanceof HTMLFormElement
+      ? container
+      : ensureElement<HTMLFormElement>("form", container);
     this.submitButtonEl = ensureElement<HTMLButtonElement>(
       'button[type="submit"]',
       container

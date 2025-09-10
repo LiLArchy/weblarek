@@ -93,6 +93,20 @@ headerBasketBtn.addEventListener("click", () => events.emit("view:cart:open"));
 // Обновление счётчика корзины
 events.on("cart:changed", () => {
   headerBasketCounter.textContent = String(cartModel.getCount());
+  // Debug: log cart state
+  console.log("[cart:changed]", {
+    count: cartModel.getCount(),
+    total: cartModel.getTotal(),
+    items: cartModel.getItems().map((i) => i.id),
+  });
+  // If cart modal is open, re-render its contents so delete buttons update UI immediately
+  const isModalOpen = modalContainer.classList.contains("modal_active");
+  const isBasketVisible = Boolean(
+    modalContainer.querySelector(".basket")
+  );
+  if (isModalOpen && isBasketVisible) {
+    events.emit("view:cart:open");
+  }
 });
 
 // Рендер корзины
@@ -105,14 +119,20 @@ events.on("view:cart:open", () => {
   const items = cartModel.getItems().map((p, index) => {
     const node = cloneTemplate<HTMLElement>(tplBasketItem);
     node.querySelector(".basket__item-index")!.textContent = String(index + 1);
-    const item = new CartItemView(node, (rid) => cartModel.removeItem(rid));
+    const item = new CartItemView(node, (rid) => {
+      console.log("[cart:item:remove]", rid);
+      cartModel.removeItem(rid);
+    });
     item["setId"](p.id);
     item["setTitle"](p.title);
     item["setPrice"](p.price);
+    // log each item rendering in cart
+    console.log("[cart:item]", { id: p.id, title: p.title, price: p.price });
     return item.render();
   });
 
   const total = cartModel.getTotal();
+  console.log("[cart:view:open]", { items: cartModel.getItems(), total });
 
   cartView.setItems(items);
   cartView.setTotal(total);
@@ -129,6 +149,7 @@ events.on("view:order:open", () => {
       const valid = Boolean(data.address) && Boolean(data.payment);
       orderForm.setDisabled(!valid);
       buyerModel.setData({ address: data.address!, payment: data.payment! });
+      console.log("[buyer:update:order]", buyerModel.getData());
     }
   );
   modalView.open(orderForm.render());
@@ -144,6 +165,7 @@ events.on("view:contacts:open", () => {
       const phoneOk = Boolean(data.phone && data.phone.length >= 6);
       contactsForm.setDisabled(!(emailOk && phoneOk));
       buyerModel.setData({ email: data.email!, phone: data.phone! });
+      console.log("[buyer:update:contacts]", buyerModel.getData());
     }
   );
   modalView.open(contactsForm.render());
@@ -151,12 +173,52 @@ events.on("view:contacts:open", () => {
 
 events.on("view:order:success", () => {
   const successTpl = ensureElement<HTMLTemplateElement>("#success");
-  const node = cloneTemplate<HTMLElement>(successTpl);
-  node.querySelector(".order-success__close")!.addEventListener("click", () => {
-    modalView.close();
-    cartModel.clear();
-  });
-  modalView.open(node);
+  const orderData = buyerModel.getData();
+  const items = cartModel.getItems().map((p) => p.id);
+  const total = cartModel.getTotal();
+
+  const payload = {
+    ...orderData,
+    items,
+    total,
+  };
+
+  console.log("[order:create:request]", payload);
+
+  weblarekApi
+    .createOrder(payload)
+    .then((response) => {
+      console.log("[order:create:success]", response);
+      const node = cloneTemplate<HTMLElement>(successTpl);
+      const desc = node.querySelector<HTMLElement>(
+        ".order-success__description"
+      );
+      if (desc) desc.textContent = `Списано ${response.total} синапсов`;
+      node
+        .querySelector(".order-success__close")!
+        .addEventListener("click", () => {
+          modalView.close();
+        });
+      modalView.open(node);
+      cartModel.clear();
+      buyerModel.clear();
+    })
+    .catch((err) => {
+      console.error("[order:create:error]", err);
+      const node = cloneTemplate<HTMLElement>(successTpl);
+      const title = node.querySelector<HTMLElement>(".order-success__title");
+      const desc = node.querySelector<HTMLElement>(
+        ".order-success__description"
+      );
+      if (title) title.textContent = "Ошибка оформления заказа";
+      if (desc) desc.textContent = String(err ?? "Неизвестная ошибка");
+      node
+        .querySelector(".order-success__close")!
+        .addEventListener("click", () => {
+          modalView.close();
+        });
+      modalView.open(node);
+    });
 });
 
 // Загрузка каталога с сервера
@@ -167,6 +229,7 @@ weblarekApi
   .getProducts()
   .then((products) => {
     productsModel.setProducts(products);
+    console.log("[catalog:loaded]", { count: products.length });
   })
   .catch((err) => {
     console.error("Ошибка загрузки каталога с сервера", err);
