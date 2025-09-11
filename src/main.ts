@@ -63,14 +63,27 @@ events.on<{ id: string }>("view:product:selected", ({ id }) => {
   const p = productsModel.getProductById(id);
   if (!p) return;
   const node = cloneTemplate<HTMLElement>(tplPreview);
-  const preview = new PreviewCardView(node, () =>
-    events.emit("view:product:addToCart", { id })
-  );
+  const preview = new PreviewCardView(node, () => {
+    // toggle add/remove
+    const already = cartModel.hasItem(id);
+    if (already) {
+      cartModel.removeItem(id);
+    } else {
+      const productToAdd = productsModel.getProductById(id);
+      if (productToAdd && productToAdd.price !== null) {
+        cartModel.addItem(productToAdd);
+      }
+    }
+    // update button state after action
+    preview["setInCart"](cartModel.hasItem(id));
+  });
   preview["setId"](p.id);
   preview["setTitle"](p.title);
   preview["setCategory"](p.category);
   preview["setImageSrc"](`${CDN_URL}${p.image}`, p.title);
   preview["setPrice"](p.price);
+  preview["setInCart"](cartModel.hasItem(p.id));
+  preview["setPriceless"](p.price === null);
   preview["setDescription"](p.description);
   modalView.open(preview.render());
 });
@@ -118,7 +131,6 @@ events.on("view:cart:open", () => {
 
   const items = cartModel.getItems().map((p, index) => {
     const node = cloneTemplate<HTMLElement>(tplBasketItem);
-    node.querySelector(".basket__item-index")!.textContent = String(index + 1);
     const item = new CartItemView(node, (rid) => {
       console.log("[cart:item:remove]", rid);
       cartModel.removeItem(rid);
@@ -126,6 +138,7 @@ events.on("view:cart:open", () => {
     item["setId"](p.id);
     item["setTitle"](p.title);
     item["setPrice"](p.price);
+    item["setIndex"](index + 1);
     // log each item rendering in cart
     console.log("[cart:item]", { id: p.id, title: p.title, price: p.price });
     return item.render();
@@ -146,12 +159,17 @@ events.on("view:order:open", () => {
     node,
     () => events.emit("view:contacts:open"),
     (data) => {
-      const valid = Boolean(data.address) && Boolean(data.payment);
-      orderForm.setDisabled(!valid);
       buyerModel.setData({ address: data.address!, payment: data.payment! });
+      const { valid, errors } = buyerModel.validateOrder();
+      orderForm.setDisabled(!valid);
+      orderForm.setErrors({ address: errors.address as string });
       console.log("[buyer:update:order]", buyerModel.getData());
     }
   );
+  // установить начальные ошибки/состояние при открытии шага
+  const initialOrderValidation = buyerModel.validateOrder();
+  orderForm.setDisabled(!initialOrderValidation.valid);
+  orderForm.setErrors({ address: initialOrderValidation.errors.address as string });
   modalView.open(orderForm.render());
 });
 
@@ -161,13 +179,23 @@ events.on("view:contacts:open", () => {
     node,
     () => events.emit("view:order:success"),
     (data) => {
-      const emailOk = Boolean(data.email && /@/.test(data.email));
-      const phoneOk = Boolean(data.phone && data.phone.length >= 6);
-      contactsForm.setDisabled(!(emailOk && phoneOk));
       buyerModel.setData({ email: data.email!, phone: data.phone! });
+      const { valid, errors } = buyerModel.validateContacts();
+      contactsForm.setDisabled(!valid);
+      contactsForm.setErrors({
+        email: errors.email as string,
+        phone: errors.phone as string,
+      });
       console.log("[buyer:update:contacts]", buyerModel.getData());
     }
   );
+  // начальная проверка контактов
+  const initialContactsValidation = buyerModel.validateContacts();
+  contactsForm.setDisabled(!initialContactsValidation.valid);
+  contactsForm.setErrors({
+    email: initialContactsValidation.errors.email as string,
+    phone: initialContactsValidation.errors.phone as string,
+  });
   modalView.open(contactsForm.render());
 });
 

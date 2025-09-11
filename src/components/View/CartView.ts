@@ -40,5 +40,8 @@ export class CartView extends Component<void> {
 
   setTotal(total: number): void {
     this.totalEl.textContent = `${total} синапсов`;
+    // запретить оформление, если корзина пуста
+    const isEmpty = total === 0;
+    this.orderButtonEl.disabled = isEmpty;
   }
 }

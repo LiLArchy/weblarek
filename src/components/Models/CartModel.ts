@@ -10,6 +10,10 @@ export class CartModel {
   }
 
   public addItem(product: IProduct): void {
+    // Бесценный товар (price === null) нельзя добавить
+    if (product.price === null) {
+      return;
+    }
     if (!this.hasItem(product.id)) {
       this.items = [...this.items, product];
       this.events?.emit("cart:changed", {

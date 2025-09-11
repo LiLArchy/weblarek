@@ -58,4 +58,47 @@ export class BuyerModel {
     const valid = Object.keys(errors).length === 0;
     return { valid, errors };
   }
+
+  // Валидация только для шага заказа (оплата и адрес)
+  public validateOrder(): {
+    valid: boolean;
+    errors: Partial<Record<keyof IBuyer, string>>;
+  } {
+    const errors: Partial<Record<keyof IBuyer, string>> = {};
+
+    if (!this.address.trim()) {
+      errors.address = "Адрес обязателен";
+    }
+
+    if (!this.payment) {
+      // на случай если поле отсутствует
+      errors.payment = "Способ оплаты обязателен" as any;
+    }
+
+    const valid = Object.keys(errors).length === 0;
+    return { valid, errors };
+  }
+
+  // Валидация только для шага контактов (email и телефон)
+  public validateContacts(): {
+    valid: boolean;
+    errors: Partial<Record<keyof IBuyer, string>>;
+  } {
+    const errors: Partial<Record<keyof IBuyer, string>> = {};
+
+    if (!this.phone.trim()) {
+      errors.phone = "Телефон обязателен";
+    } else if (!/^\+?\d{10,15}$/.test(this.phone.trim())) {
+      errors.phone = "Некорректный телефон";
+    }
+
+    if (!this.email.trim()) {
+      errors.email = "Email обязателен";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email.trim())) {
+      errors.email = "Некорректный email";
+    }
+
+    const valid = Object.keys(errors).length === 0;
+    return { valid, errors };
+  }
 }

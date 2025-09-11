@@ -5,6 +5,8 @@ import { ensureElement } from "../../../utils/utils";
 export class PreviewCardView extends AbstractCardView<IProduct> {
   protected descriptionEl: HTMLElement;
   protected actionButton: HTMLButtonElement;
+  protected inCart: boolean = false;
+  protected onActionInternal?: (id: string) => void;
 
   constructor(container: HTMLElement, onAction?: (id: string) => void) {
     super(container);
@@ -13,16 +15,28 @@ export class PreviewCardView extends AbstractCardView<IProduct> {
       ".card__button",
       container
     );
-    if (onAction) {
-      this.actionButton.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onAction(this["id"]);
-      });
-    }
+    this.onActionInternal = onAction;
+    this.actionButton.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (this.onActionInternal) {
+        this.onActionInternal(this["id"]);
+      }
+    });
   }
 
   setDescription(text: string): void {
     this.descriptionEl.textContent = text;
+  }
+
+  setInCart(inCart: boolean): void {
+    this.inCart = inCart;
+    this.actionButton.textContent = inCart ? "Удалить" : "В корзину";
+    this.actionButton.classList.toggle("button_alt", inCart);
+  }
+
+  setPriceless(state: boolean): void {
+    // disable if priceless
+    this.actionButton.disabled = state;
   }
 }
